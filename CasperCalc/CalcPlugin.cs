@@ -2,6 +2,9 @@
 using BepInEx.Logging;
 using HarmonyLib;
 using UnityEngine;
+using System.Text;
+using EquinoxsModUtils;
+using BepInEx.Configuration;
 
 namespace CasperCalc
 {
@@ -13,7 +16,7 @@ namespace CasperCalc
         private const string VersionString = "1.0.0";
 
         private static readonly Harmony Harmony = new Harmony(MyGUID);
-        public static ManualLogSource Log = new ManualLogSource(PluginName);
+        public static ManualLogSource Log;
         private string input = "";
         private string result = "";
         private bool showCalculator = false;
@@ -21,14 +24,16 @@ namespace CasperCalc
         private float centeredX;
         private float centeredY;
         private Rect calculatorWindowRect;
+        public static ConfigEntry<KeyCode> OpenCalc;
 
         private void Awake()
         {
-            Logger.LogInfo($"PluginName: {PluginName}, VersionString: {VersionString} is loading...");
+            Log = Logger; // Initialize Log to Logger at the start
+            Log.LogInfo($"PluginName: {PluginName}, VersionString: {VersionString} is loading...");
             Harmony.PatchAll();
+            CreateConfigEntries();
 
             Log.LogInfo($"PluginName: {PluginName}, VersionString: {VersionString} is loaded.");
-            Log = Logger;
         }
 
         void Start()
@@ -40,13 +45,24 @@ namespace CasperCalc
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.N))
+            if (Input.GetKeyDown(OpenCalc.Value))
             {
-                showCalculator = !showCalculator;
-                if (showCalculator)
-                {
-                    inputFieldFocused = true;
-                }
+                ToggleCalculator();
+            }
+        }
+
+        private void CreateConfigEntries()
+        {
+            OpenCalc = Config.Bind("General", "Calculator Key", KeyCode.N, new ConfigDescription("Key to open and close the window."));
+        }
+
+        private void ToggleCalculator()
+        {
+            showCalculator = !showCalculator;
+            ModUtils.FreeCursor(showCalculator);  // Update cursor state
+            if (showCalculator)
+            {
+                inputFieldFocused = true;
             }
         }
 
@@ -71,9 +87,16 @@ namespace CasperCalc
                 fontSize = 24
             };
 
+            // Handle toggle key press inside the CalculatorWindow method
+            if (Event.current.type == EventType.KeyDown && Event.current.keyCode == OpenCalc.Value)
+            {
+                ToggleCalculator();
+                Event.current.Use(); // Mark the event as used
+            }
+
             if (GUI.Button(new Rect(calculatorWindowRect.width - 35, 5, 30, 30), "X"))
             {
-                showCalculator = false;
+                ToggleCalculator();  // Use the ToggleCalculator method
             }
             GUILayout.Space(40);
             GUILayout.BeginVertical();
@@ -112,25 +135,24 @@ namespace CasperCalc
 
         private double EvaluateExpression(string expression)
         {
-            var dataTable = new System.Data.DataTable();
-            return double.Parse(dataTable.Compute(expression, "").ToString());
+            using (var dataTable = new System.Data.DataTable())
+            {
+                return double.Parse(dataTable.Compute(expression, "").ToString());
+            }
         }
 
         private string ValidateInput(string input)
         {
             string validCharacters = "0123456789+-*/().";
-            string validatedInput = "";
+            StringBuilder validatedInput = new StringBuilder();
             foreach (char c in input)
             {
                 if (validCharacters.Contains(c.ToString()))
                 {
-                    validatedInput += c;
+                    validatedInput.Append(c);
                 }
             }
-            return validatedInput;
+            return validatedInput.ToString();
         }
     }
 }
-
-
-
